@@ -153,22 +153,58 @@ public class RiverFlowSimulation : MonoBehaviour
             waveSpeedMultipliers = new float[maxWaves];
         }
 
+        // 幅倍率
         for (int waveId = 0; waveId < maxWaves; waveId++)
         {
-            // 幅倍率
             waveWidthMultipliers[waveId] = randomizeWaveWidth
                 ? (0.5f + (float)rng.NextDouble() * 1.5f)  // 0.5～2.0
                 : 1.0f;  // ランダム化OFF時は1.0倍
+        }
 
-            // 下側速度倍率
-            waveBottomSpeedMultipliers[waveId] = randomizeBottomSpeed
-                ? (0.5f + (float)rng.NextDouble() * 1.5f)  // 0.5～2.0
-                : 1.0f;  // ランダム化OFF時は1.0倍（元の基準値）
+        // 下側速度倍率（交差防止：発生順に降順ソート）
+        if (randomizeBottomSpeed)
+        {
+            float[] randomBottomSpeeds = new float[maxWaves];
+            for (int i = 0; i < maxWaves; i++)
+            {
+                randomBottomSpeeds[i] = 0.5f + (float)rng.NextDouble() * 1.5f;
+            }
+            System.Array.Sort(randomBottomSpeeds);
+            System.Array.Reverse(randomBottomSpeeds);
+            for (int waveId = 0; waveId < maxWaves; waveId++)
+            {
+                waveBottomSpeedMultipliers[waveId] = randomBottomSpeeds[waveId];
+            }
+        }
+        else
+        {
+            for (int waveId = 0; waveId < maxWaves; waveId++)
+            {
+                waveBottomSpeedMultipliers[waveId] = 1.0f;
+            }
+        }
 
-            // 上側速度倍率
-            waveSpeedMultipliers[waveId] = randomizeTopSpeed
-                ? (0.5f + (float)rng.NextDouble() * 1.5f)  // 0.5～2.0
-                : 1.0f;  // ランダム化OFF時は1.0倍（通常）
+        // 上側速度倍率（交差防止：発生順に降順ソート）
+        if (randomizeTopSpeed)
+        {
+            float[] randomTopSpeeds = new float[maxWaves];
+            for (int i = 0; i < maxWaves; i++)
+            {
+                randomTopSpeeds[i] = 0.5f + (float)rng.NextDouble() * 1.5f;
+            }
+            System.Array.Sort(randomTopSpeeds);
+            System.Array.Reverse(randomTopSpeeds);
+            for (int waveId = 0; waveId < maxWaves; waveId++)
+            {
+                waveSpeedMultipliers[waveId] = randomTopSpeeds[waveId];
+            }
+        }
+        else
+        {
+            for (int waveId = 0; waveId < maxWaves; waveId++)
+            {
+                waveSpeedMultipliers[waveId] = 1.0f;
+            }
         }
     }
 
@@ -225,22 +261,58 @@ public class RiverFlowSimulation : MonoBehaviour
                 : 1.0f;  // ランダム化OFF時は1.0倍
         }
 
-        // 各壁の下側速度倍率を初期化
+        // 各壁の下側速度倍率を初期化（交差防止：発生順に降順ソート）
         waveBottomSpeedMultipliers = new float[maxWaves];
-        for (int waveId = 0; waveId < maxWaves; waveId++)
+        if (randomizeBottomSpeed)
         {
-            waveBottomSpeedMultipliers[waveId] = randomizeBottomSpeed
-                ? (0.5f + (float)rng.NextDouble() * 1.5f)  // 0.5～2.0
-                : 1.0f;  // ランダム化OFF時は1.0倍（元の基準値）
+            // ランダムな速度を生成
+            float[] randomBottomSpeeds = new float[maxWaves];
+            for (int i = 0; i < maxWaves; i++)
+            {
+                randomBottomSpeeds[i] = 0.5f + (float)rng.NextDouble() * 1.5f;  // 0.5～2.0
+            }
+            // 降順にソート（速い→遅い）
+            System.Array.Sort(randomBottomSpeeds);
+            System.Array.Reverse(randomBottomSpeeds);
+            // waveId順に割り当て（waveId=0が最速、後発ほど遅い）
+            for (int waveId = 0; waveId < maxWaves; waveId++)
+            {
+                waveBottomSpeedMultipliers[waveId] = randomBottomSpeeds[waveId];
+            }
+        }
+        else
+        {
+            for (int waveId = 0; waveId < maxWaves; waveId++)
+            {
+                waveBottomSpeedMultipliers[waveId] = 1.0f;  // ランダム化OFF時は1.0倍（元の基準値）
+            }
         }
 
-        // 各壁の上側速度倍率を初期化
+        // 各壁の上側速度倍率を初期化（交差防止：発生順に降順ソート）
         waveSpeedMultipliers = new float[maxWaves];
-        for (int waveId = 0; waveId < maxWaves; waveId++)
+        if (randomizeTopSpeed)
         {
-            waveSpeedMultipliers[waveId] = randomizeTopSpeed
-                ? (0.5f + (float)rng.NextDouble() * 1.5f)  // 0.5～2.0
-                : 1.0f;  // ランダム化OFF時は1.0倍（通常）
+            // ランダムな速度を生成
+            float[] randomTopSpeeds = new float[maxWaves];
+            for (int i = 0; i < maxWaves; i++)
+            {
+                randomTopSpeeds[i] = 0.5f + (float)rng.NextDouble() * 1.5f;  // 0.5～2.0
+            }
+            // 降順にソート（速い→遅い）
+            System.Array.Sort(randomTopSpeeds);
+            System.Array.Reverse(randomTopSpeeds);
+            // waveId順に割り当て（waveId=0が最速、後発ほど遅い）
+            for (int waveId = 0; waveId < maxWaves; waveId++)
+            {
+                waveSpeedMultipliers[waveId] = randomTopSpeeds[waveId];
+            }
+        }
+        else
+        {
+            for (int waveId = 0; waveId < maxWaves; waveId++)
+            {
+                waveSpeedMultipliers[waveId] = 1.0f;  // ランダム化OFF時は1.0倍（通常）
+            }
         }
 
         // maxWaves本分のパーティクルを作成（各壁particlesPerWave個）
