@@ -46,7 +46,7 @@ public class RiverFlowVisualizer : MonoBehaviour
         var main = ps.main;
         main.loop = false;
         main.playOnAwake = false;
-        main.maxParticles = 50000;
+        main.maxParticles = 200000;  // WaveModeの最大値（maxWaves=20 × particlesPerWave=10000）に対応
         main.simulationSpace = ParticleSystemSimulationSpace.World;
         main.startLifetime = float.MaxValue;
         main.startSize = simulation.particleSize;
@@ -68,7 +68,7 @@ public class RiverFlowVisualizer : MonoBehaviour
             renderer.material = particleMaterial;
         }
 
-        renderParticles = new ParticleSystem.Particle[50000];
+        renderParticles = new ParticleSystem.Particle[200000];  // 最大パーティクル数に対応
     }
 
     void LateUpdate()
@@ -97,6 +97,14 @@ public class RiverFlowVisualizer : MonoBehaviour
         int count = (simulation.mode == SimulationMode.WaveMode)
             ? simulation.GetParticleCount()
             : Mathf.Min(displayCount, simulation.GetParticleCount());
+
+        // 配列サイズが不足している場合は拡張
+        if (renderParticles.Length < count)
+        {
+            int newSize = Mathf.NextPowerOfTwo(count);  // 2のべき乗に切り上げ
+            Debug.LogWarning($"RenderParticles配列を拡張: {renderParticles.Length} → {newSize}");
+            renderParticles = new ParticleSystem.Particle[newSize];
+        }
 
         // ParticleSystemのパーティクル更新
         for (int i = 0; i < count; i++)
