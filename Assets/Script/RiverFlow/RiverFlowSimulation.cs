@@ -302,13 +302,19 @@ public class RiverFlowSimulation : MonoBehaviour
             // 非表示位置にあるパーティクルはスキップ
             if (p.position.x < -5f) continue;
 
-            // ベクトル場から速度取得
-            Vector2 velocity = vectorField.GetVelocity(p.position.x, p.position.y, time);
+            // 黄金比による時間オフセット（壁ごとに異なる位相）
+            float timeOffset = p.waveId * 0.618f;
 
-            // X方向: 一律waveSpeed + VectorFieldの影響を揺れ強度で制御
+            // 黄金比の補数による空間オフセット（壁ごとに異なる開始位置）
+            float spaceOffset = p.waveId * 0.382f;
+
+            // ベクトル場から速度取得（X座標にオフセットで各壁が異なる波形開始位置から蛇行）
+            Vector2 velocity = vectorField.GetVelocity(p.position.x + spaceOffset, p.position.y, time + timeOffset);
+
+            // X方向: 一律waveSpeed + VectorFieldの影響を揺れ強度で制御（増幅なし、自然な波）
             p.position.x += waveSpeed * Time.deltaTime + velocity.x * dt * speedMultiplier * waveUndulationStrength;
 
-            // Y方向: VectorFieldの影響を揺れ強度で制御
+            // Y方向: VectorFieldの影響を揺れ強度で制御（増幅なし、自然な波）
             p.position.y += velocity.y * dt * speedMultiplier * waveUndulationStrength;
 
             // 右端を超えたら非表示位置に戻す
