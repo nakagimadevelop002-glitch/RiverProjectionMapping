@@ -48,8 +48,9 @@ public class RiverFlowSimulation : MonoBehaviour
     [Range(1000, 10000)]
     public int particlesPerWave = 3000;
 
-    [Tooltip("波の揺らぎを有効化（VectorFieldによる揺らぎ）")]
-    public bool waveUndulation = false;
+    [Tooltip("波の揺らぎ強度（0.0=壁状態、1.0=NormalMode相当の揺れ）")]
+    [Range(0f, 1f)]
+    public float waveUndulationStrength = 0f;
 
     [Header("デバッグ表示")]
     [Tooltip("パーティクルを表示するか")]
@@ -287,52 +288,9 @@ public class RiverFlowSimulation : MonoBehaviour
     }
 
     /// <summary>
-    /// WaveMode: パーティクル更新
+    /// WaveMode: パーティクル更新（揺れ強度を0.0～1.0で制御）
     /// </summary>
     void UpdateParticlesWave()
-    {
-        if (waveUndulation)
-        {
-            UpdateParticlesWaveWithUndulation();
-        }
-        else
-        {
-            UpdateParticlesWaveFlat();
-        }
-    }
-
-    /// <summary>
-    /// WaveMode: 揺らぎなし（壁として移動）
-    /// </summary>
-    void UpdateParticlesWaveFlat()
-    {
-        float dt = Time.deltaTime;
-
-        // 全パーティクルを右に移動
-        for (int i = 0; i < particles.Count; i++)
-        {
-            var p = particles[i];
-
-            // 非表示位置にあるパーティクルはスキップ
-            if (p.position.x < -5f) continue;
-
-            p.position.x += waveSpeed * dt;
-
-            // 右端を超えたら非表示位置に戻す
-            if (p.position.x > 1.02f)
-            {
-                p.position.x = -10f;
-                p.position.y = 0f;
-            }
-
-            particles[i] = p;
-        }
-    }
-
-    /// <summary>
-    /// WaveMode: 揺らぎあり（VectorFieldの効果量を半減）
-    /// </summary>
-    void UpdateParticlesWaveWithUndulation()
     {
         float dt = 0.7f / 24f;  // NormalModeと同じ時間ステップ
         float time = Time.time;
@@ -347,11 +305,11 @@ public class RiverFlowSimulation : MonoBehaviour
             // ベクトル場から速度取得
             Vector2 velocity = vectorField.GetVelocity(p.position.x, p.position.y, time);
 
-            // X方向: 一律waveSpeed + VectorFieldの影響を20%加える
-            p.position.x += waveSpeed * Time.deltaTime + velocity.x * dt * speedMultiplier * 0.2f;
+            // X方向: 一律waveSpeed + VectorFieldの影響を揺れ強度で制御
+            p.position.x += waveSpeed * Time.deltaTime + velocity.x * dt * speedMultiplier * waveUndulationStrength;
 
-            // Y方向: VectorFieldの影響を30%加える
-            p.position.y += velocity.y * dt * speedMultiplier * 0.3f;
+            // Y方向: VectorFieldの影響を揺れ強度で制御
+            p.position.y += velocity.y * dt * speedMultiplier * waveUndulationStrength;
 
             // 右端を超えたら非表示位置に戻す
             if (p.position.x > 1.02f)
@@ -360,14 +318,17 @@ public class RiverFlowSimulation : MonoBehaviour
                 p.position.y = 0f;
             }
 
-            // 上下は反射（バウンド）
-            if (p.position.y < -0.02f)
+            // 上下は反射（バウンド）- 揺れ強度が0より大きい場合のみ
+            if (waveUndulationStrength > 0f)
             {
-                p.position.y = -p.position.y;
-            }
-            if (p.position.y > 1.02f)
-            {
-                p.position.y = 2.0f - p.position.y;
+                if (p.position.y < -0.02f)
+                {
+                    p.position.y = -p.position.y;
+                }
+                if (p.position.y > 1.02f)
+                {
+                    p.position.y = 2.0f - p.position.y;
+                }
             }
 
             particles[i] = p;
