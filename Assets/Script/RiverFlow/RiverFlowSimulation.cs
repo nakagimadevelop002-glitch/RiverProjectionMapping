@@ -52,14 +52,12 @@ public class RiverFlowSimulation : MonoBehaviour
     [Range(0f, 1f)]
     public float waveUndulationStrength = 0f;
 
-    [Tooltip("波の幅をランダム化（壁ごとに0.5～2.0倍の幅、最大0.1）")]
+    [Tooltip("波の幅をランダム化（壁ごとに0.5～最大倍率の幅）")]
     public bool randomizeWaveWidth = false;
 
-    [Tooltip("上側の速度をランダム化（壁ごとに0.5～2.0倍）")]
-    public bool randomizeTopSpeed = false;
-
-    [Tooltip("下側の速度をランダム化（壁ごとに0.5～2.0倍）")]
-    public bool randomizeBottomSpeed = false;
+    [Tooltip("波の幅ランダム化の最大倍率")]
+    [Min(0.5f)]
+    public float waveWidthMaxMultiplier = 2.0f;
 
     [Header("デバッグ表示")]
     [Tooltip("パーティクルを表示するか")]
@@ -78,12 +76,8 @@ public class RiverFlowSimulation : MonoBehaviour
     private int currentWaveId = 0;  // 次に発生させる壁ID
     private int lastMaxWaves = -1;  // 前回のmaxWaves値
     private int lastParticlesPerWave = -1;  // 前回のparticlesPerWave値
-    private float[] waveWidthMultipliers;  // 各壁の幅倍率（0.5～2.0、最大幅0.1）
-    private float[] waveSpeedMultipliers;  // 各壁の上側速度倍率（OFF:1.0、ON:0.5～2.0）
-    private float[] waveBottomSpeedMultipliers;  // 各壁の下側速度倍率（OFF:1.0、ON:0.5～2.0）
+    private float[] waveWidthMultipliers;  // 各壁の幅倍率（0.5～waveWidthMaxMultiplier）
     private bool lastRandomizeWaveWidth = false;  // 前回のrandomizeWaveWidth値
-    private bool lastRandomizeTopSpeed = false;  // 前回のrandomizeTopSpeed値
-    private bool lastRandomizeBottomSpeed = false;  // 前回のrandomizeBottomSpeed値
 
     void Start()
     {
@@ -125,14 +119,9 @@ public class RiverFlowSimulation : MonoBehaviour
         }
 
         // ランダム化Boolが変更されたら配列を再初期化
-        if (randomizeWaveWidth != lastRandomizeWaveWidth ||
-            randomizeTopSpeed != lastRandomizeTopSpeed ||
-            randomizeBottomSpeed != lastRandomizeBottomSpeed)
+        if (randomizeWaveWidth != lastRandomizeWaveWidth)
         {
             lastRandomizeWaveWidth = randomizeWaveWidth;
-            lastRandomizeTopSpeed = randomizeTopSpeed;
-            lastRandomizeBottomSpeed = randomizeBottomSpeed;
-
             ReinitializeRandomMultipliers();
         }
 
@@ -149,23 +138,14 @@ public class RiverFlowSimulation : MonoBehaviour
         if (waveWidthMultipliers == null || waveWidthMultipliers.Length != maxWaves)
         {
             waveWidthMultipliers = new float[maxWaves];
-            waveBottomSpeedMultipliers = new float[maxWaves];
-            waveSpeedMultipliers = new float[maxWaves];
         }
 
-        // 幅倍率（これはランダム化可能）
+        // 幅倍率
         for (int waveId = 0; waveId < maxWaves; waveId++)
         {
             waveWidthMultipliers[waveId] = randomizeWaveWidth
-                ? (0.5f + (float)rng.NextDouble() * 1.5f)  // 0.5～2.0
-                : 1.0f;  // ランダム化OFF時は1.0倍
-        }
-
-        // 速度倍率はリセット（実際の速度はSpawnWaveで動的に決定）
-        for (int waveId = 0; waveId < maxWaves; waveId++)
-        {
-            waveBottomSpeedMultipliers[waveId] = 1.0f;
-            waveSpeedMultipliers[waveId] = 1.0f;
+                ? (0.5f + (float)rng.NextDouble() * (waveWidthMaxMultiplier - 0.5f))
+                : 1.0f;
         }
     }
 
@@ -218,22 +198,8 @@ public class RiverFlowSimulation : MonoBehaviour
         for (int waveId = 0; waveId < maxWaves; waveId++)
         {
             waveWidthMultipliers[waveId] = randomizeWaveWidth
-                ? (0.5f + (float)rng.NextDouble() * 1.5f)  // 0.5～2.0
-                : 1.0f;  // ランダム化OFF時は1.0倍
-        }
-
-        // 各壁の下側速度倍率を初期化（初期値のみ、実際の速度はSpawnWaveで決定）
-        waveBottomSpeedMultipliers = new float[maxWaves];
-        for (int waveId = 0; waveId < maxWaves; waveId++)
-        {
-            waveBottomSpeedMultipliers[waveId] = 1.0f;
-        }
-
-        // 各壁の上側速度倍率を初期化（初期値のみ、実際の速度はSpawnWaveで決定）
-        waveSpeedMultipliers = new float[maxWaves];
-        for (int waveId = 0; waveId < maxWaves; waveId++)
-        {
-            waveSpeedMultipliers[waveId] = 1.0f;
+                ? (0.5f + (float)rng.NextDouble() * (waveWidthMaxMultiplier - 0.5f))
+                : 1.0f;
         }
 
         // maxWaves本分のパーティクルを作成（各壁particlesPerWave個）
@@ -288,58 +254,7 @@ public class RiverFlowSimulation : MonoBehaviour
         // 使用可能なwaveIdが見つかった場合のみ生成
         if (availableWaveId >= 0)
         {
-            // 画面上にある全ての壁の速度を調べ、最も遅い速度を見つける（交差防止）
-            float minTopSpeed = 1.1f; // 初期値（ランダム範囲の最大値）
-            float minBottomSpeed = 1.1f;
-
-            for (int i = 0; i < particles.Count; i++)
-            {
-                var p = particles[i];
-                // 画面上にあるパーティクルのみチェック（-0.1～1.2の範囲）
-                if (p.position.x >= -0.1f && p.position.x <= 1.2f)
-                {
-                    int wid = p.waveId;
-                    if (wid != availableWaveId && waveSpeedMultipliers != null && waveBottomSpeedMultipliers != null)
-                    {
-                        float topSpeed = waveSpeedMultipliers[wid];
-                        float bottomSpeed = waveBottomSpeedMultipliers[wid];
-
-                        if (topSpeed < minTopSpeed) minTopSpeed = topSpeed;
-                        if (bottomSpeed < minBottomSpeed) minBottomSpeed = bottomSpeed;
-                    }
-                }
-            }
-
-            // 新しい壁の速度を決定（画面上の最も遅い速度より必ず遅く）
-            float newTopSpeed, newBottomSpeed;
-
-            if (randomizeTopSpeed)
-            {
-                // ランダム範囲0.9～1.1、ただし画面上の最も遅い速度-0.02より遅く
-                float randomTop = 0.9f + (float)rng.NextDouble() * 0.2f;
-                newTopSpeed = Mathf.Max(0.8f, Mathf.Min(minTopSpeed - 0.02f, randomTop));
-            }
-            else
-            {
-                newTopSpeed = 1.0f;
-            }
-
-            if (randomizeBottomSpeed)
-            {
-                // ランダム範囲0.9～1.1、ただし画面上の最も遅い速度-0.02より遅く
-                float randomBottom = 0.9f + (float)rng.NextDouble() * 0.2f;
-                newBottomSpeed = Mathf.Max(0.8f, Mathf.Min(minBottomSpeed - 0.02f, randomBottom));
-            }
-            else
-            {
-                newBottomSpeed = 1.0f;
-            }
-
-            // 速度を記録
-            waveSpeedMultipliers[availableWaveId] = newTopSpeed;
-            waveBottomSpeedMultipliers[availableWaveId] = newBottomSpeed;
-
-            // 壁の幅倍率取得（randomizeWaveWidthがtrueの場合のみ適用）
+            // 壁の幅倍率取得
             float widthMultiplier = (randomizeWaveWidth && waveWidthMultipliers != null) ? waveWidthMultipliers[availableWaveId] : 1.0f;
             float waveWidth = 0.05f * widthMultiplier;  // 基準幅0.05を倍率で調整
 
@@ -348,12 +263,12 @@ public class RiverFlowSimulation : MonoBehaviour
                 var p = particles[i];
                 if (p.waveId == availableWaveId && p.position.x < -5f)
                 {
-                    p.position.x = (float)rng.NextDouble() * waveWidth - 0.02f;
+                    // 横幅を考慮して完全に画面外に配置（-0.1 - waveWidth ～ -0.1）
+                    p.position.x = -0.1f - waveWidth + (float)rng.NextDouble() * waveWidth;
                     p.position.y = (float)rng.NextDouble();
                     particles[i] = p;
                 }
             }
-
             // 次のwaveIdへ進める
             currentWaveId = (availableWaveId + 1) % maxWaves;
         }
@@ -447,18 +362,11 @@ public class RiverFlowSimulation : MonoBehaviour
             // ベクトル場から速度取得（X座標にオフセットで各壁が異なる波形開始位置から蛇行）
             Vector2 velocity = vectorField.GetVelocity(p.position.x + spaceOffset, p.position.y, time + timeOffset);
 
-            // 波ごとの下側・上側速度倍率取得（各0.5～2.0でランダム）
-            float bottomSpeed = (waveBottomSpeedMultipliers != null) ? waveBottomSpeedMultipliers[p.waveId] : 1.0f;
-            float topSpeed = (waveSpeedMultipliers != null) ? waveSpeedMultipliers[p.waveId] : 1.0f;
+            // X方向: 一律waveSpeed + VectorFieldの影響を揺れ強度で制御
+            p.position.x += waveSpeed * Time.deltaTime + velocity.x * dt * speedMultiplier * waveUndulationStrength;
 
-            // Y座標に応じて線形補間（下側から上側へ）
-            float finalSpeedMultiplier = Mathf.Lerp(bottomSpeed, topSpeed, p.position.y);
-
-            // X方向: 一律waveSpeed + VectorFieldの影響を揺れ強度で制御（最終速度倍率を適用）
-            p.position.x += waveSpeed * Time.deltaTime * finalSpeedMultiplier + velocity.x * dt * speedMultiplier * waveUndulationStrength * finalSpeedMultiplier;
-
-            // Y方向: VectorFieldの影響を揺れ強度で制御（最終速度倍率を適用）
-            p.position.y += velocity.y * dt * speedMultiplier * waveUndulationStrength * finalSpeedMultiplier;
+            // Y方向: VectorFieldの影響を揺れ強度で制御
+            p.position.y += velocity.y * dt * speedMultiplier * waveUndulationStrength;
 
             // 右端を超えたら非表示位置に戻す
             if (p.position.x > 1.02f)
@@ -521,11 +429,98 @@ public class RiverFlowSimulation : MonoBehaviour
     /// </summary>
     public int GetParticleCount() => particles.Count;
 
+    // ========================================
+    // UnityEvent用UI制御関数
+    // ========================================
+
     /// <summary>
-    /// 速度倍率を設定
+    /// 速度倍率を設定（Slider用 - NormalMode）
     /// </summary>
     public void SetSpeedMultiplier(float speed)
     {
         speedMultiplier = speed;
+    }
+
+    /// <summary>
+    /// 壁の生成間隔を設定（Slider用 - WaveMode）
+    /// </summary>
+    public void SetWaveInterval(float interval)
+    {
+        waveInterval = interval;
+
+        if (Application.isPlaying && mode == SimulationMode.WaveMode)
+        {
+            StartWaving();  // InvokeRepeatingを再設定
+        }
+    }
+
+    /// <summary>
+    /// 壁の移動速度を設定（Slider用 - WaveMode）
+    /// </summary>
+    public void SetWaveSpeed(float speed)
+    {
+        waveSpeed = speed;
+    }
+
+    /// <summary>
+    /// 波の揺れ強度を設定（Slider用 - WaveMode）
+    /// </summary>
+    public void SetWaveUndulationStrength(float strength)
+    {
+        waveUndulationStrength = strength;
+    }
+
+    /// <summary>
+    /// 波の幅最大倍率を設定（Slider用 - WaveMode）
+    /// </summary>
+    public void SetWaveWidthMaxMultiplier(float multiplier)
+    {
+        waveWidthMaxMultiplier = multiplier;
+    }
+
+    /// <summary>
+    /// WaveModeのON/OFF切り替え（UnityEvent用）
+    /// </summary>
+    /// <param name="enabled">true: WaveMode、false: NormalMode</param>
+    public void SetWaveMode(bool enabled)
+    {
+        if (enabled)
+        {
+            // WaveModeに切り替え
+            if (mode == SimulationMode.WaveMode) return;
+            mode = SimulationMode.WaveMode;
+
+            if (Application.isPlaying && isActiveAndEnabled)
+            {
+                StartWaving();
+            }
+        }
+        else
+        {
+            // NormalModeに切り替え
+            if (mode == SimulationMode.NormalMode) return;
+            mode = SimulationMode.NormalMode;
+
+            if (Application.isPlaying)
+            {
+                CancelInvoke(nameof(SpawnWave));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 波の幅ランダム化を設定（UnityEvent用）
+    /// </summary>
+    public void SetRandomizeWaveWidth(bool enabled)
+    {
+        if (randomizeWaveWidth == enabled) return;
+
+        randomizeWaveWidth = enabled;
+        lastRandomizeWaveWidth = enabled;
+
+        if (Application.isPlaying && isActiveAndEnabled && mode == SimulationMode.WaveMode)
+        {
+            ReinitializeRandomMultipliers();
+        }
     }
 }

@@ -30,6 +30,34 @@ public class RiverFlowVisualizer : MonoBehaviour
     private ParticleSystem ps;
     private ParticleSystem.Particle[] renderParticles;
 
+    // ========================================
+    // UnityEvent用UI制御関数（RGBスライダー）
+    // ========================================
+
+    /// <summary>
+    /// パーティクルの赤色成分を設定（Slider用）
+    /// </summary>
+    public void SetParticleColorR(float r)
+    {
+        particleColor.r = r;
+    }
+
+    /// <summary>
+    /// パーティクルの緑色成分を設定（Slider用）
+    /// </summary>
+    public void SetParticleColorG(float g)
+    {
+        particleColor.g = g;
+    }
+
+    /// <summary>
+    /// パーティクルの青色成分を設定（Slider用）
+    /// </summary>
+    public void SetParticleColorB(float b)
+    {
+        particleColor.b = b;
+    }
+
     void Start()
     {
         InitializeParticleSystem();
