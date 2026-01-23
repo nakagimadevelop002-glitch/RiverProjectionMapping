@@ -23,14 +23,6 @@ public class VectorFieldTest : MonoBehaviour
     void Start()
     {
         vectorField = new VectorField();
-
-        // 初期テスト：中心位置での速度を出力
-        Vector2 centerVel = vectorField.GetVelocity(0.5f, 0.5f, 0f);
-        Debug.Log($"[VectorFieldTest] 中心位置(0.5, 0.5)での速度: {centerVel}");
-
-        // 最大速度を出力
-        float maxSpeed = vectorField.GetMaxSpeed(0f);
-        Debug.Log($"[VectorFieldTest] 最大速度: {maxSpeed}");
     }
 
     void OnDrawGizmos()

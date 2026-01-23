@@ -363,10 +363,10 @@ public class RiverFlowSimulation : MonoBehaviour
             Vector2 velocity = vectorField.GetVelocity(p.position.x + spaceOffset, p.position.y, time + timeOffset);
 
             // X方向: 一律waveSpeed + VectorFieldの影響を揺れ強度で制御
-            p.position.x += waveSpeed * Time.deltaTime + velocity.x * dt * speedMultiplier * waveUndulationStrength;
+            p.position.x += waveSpeed * Time.deltaTime + velocity.x * dt * waveUndulationStrength;
 
             // Y方向: VectorFieldの影響を揺れ強度で制御
-            p.position.y += velocity.y * dt * speedMultiplier * waveUndulationStrength;
+            p.position.y += velocity.y * dt * waveUndulationStrength;
 
             // 右端を超えたら非表示位置に戻す
             if (p.position.x > 1.02f)
@@ -434,11 +434,18 @@ public class RiverFlowSimulation : MonoBehaviour
     // ========================================
 
     /// <summary>
-    /// 速度倍率を設定（Slider用 - NormalMode）
+    /// 速度を設定（Slider用 - 両モード対応）
     /// </summary>
     public void SetSpeedMultiplier(float speed)
     {
-        speedMultiplier = speed;
+        if (mode == SimulationMode.NormalMode)
+        {
+            speedMultiplier = speed;
+        }
+        else if (mode == SimulationMode.WaveMode)
+        {
+            waveSpeed = speed;
+        }
     }
 
     /// <summary>
@@ -452,14 +459,6 @@ public class RiverFlowSimulation : MonoBehaviour
         {
             StartWaving();  // InvokeRepeatingを再設定
         }
-    }
-
-    /// <summary>
-    /// 壁の移動速度を設定（Slider用 - WaveMode）
-    /// </summary>
-    public void SetWaveSpeed(float speed)
-    {
-        waveSpeed = speed;
     }
 
     /// <summary>
@@ -492,6 +491,8 @@ public class RiverFlowSimulation : MonoBehaviour
 
             if (Application.isPlaying && isActiveAndEnabled)
             {
+                particles.Clear();
+                InitializeWave();
                 StartWaving();
             }
         }
@@ -504,6 +505,8 @@ public class RiverFlowSimulation : MonoBehaviour
             if (Application.isPlaying)
             {
                 CancelInvoke(nameof(SpawnWave));
+                particles.Clear();
+                InitializeNormal();
             }
         }
     }
