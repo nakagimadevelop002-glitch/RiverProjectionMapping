@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Collections;
 
 /// <summary>
-/// Pythonスクリプトを起動し、川の速度を受け取る
+/// Pythonスクリプトを定期的に起動し、川の速度を受け取る
 /// </summary>
 public class CameraSpeedReceiver : MonoBehaviour
 {
@@ -12,7 +12,30 @@ public class CameraSpeedReceiver : MonoBehaviour
     public string pythonExePath = "python";
 
     [Tooltip("実行するPythonスクリプトのパス")]
-    public string scriptPath = "Assets/StreamingAssets/PythonScripts/river_speed_camera.py";
+    public string scriptPath = "Assets/StreamingAssets/PythonScripts/baseline_stiv.py";
+
+    [Header("カメラ設定")]
+    [Tooltip("カメラID（0: ASUS IR camera、1: ASUS FHD webcam、2以降: カメラ名で指定）")]
+    [Range(0, 9)]
+    public int cameraId = 1;
+
+    [Tooltip("カメラ名（ID 2以降の場合に使用。例: HD Webcam eMeet C960）")]
+    public string cameraName = "";
+
+    [Header("計測モード")]
+    [Tooltip("テストモード（PCカメラで手の動きを計測）")]
+    public bool testMode = false;
+
+    [Tooltip("テストモード時の空間分解能 [m/pixel]（50cm距離の手の動き用）")]
+    public float testSpatialResolution = 0.05f;
+
+    [Tooltip("本番モード時の空間分解能 [m/pixel]（川の計測用）")]
+    public float normalSpatialResolution = 0.01f;
+
+    [Header("計測間隔設定")]
+    [Tooltip("計測実行間隔（秒）")]
+    [Range(15f, 300f)]
+    public float measurementInterval = 15f;
 
     [Header("速度適用")]
     [Tooltip("速度を適用するRiverFlowSimulation")]
@@ -21,6 +44,11 @@ public class CameraSpeedReceiver : MonoBehaviour
     [Tooltip("受信した速度を自動的に適用するか")]
     public bool autoApplySpeed = true;
 
+    [Header("計測設定")]
+    [Tooltip("有効な速度の最小値（これ以下は計測失敗とみなす）[m/s]")]
+    [Range(0.001f, 0.1f)]
+    public float minimumValidSpeed = 0.01f;
+
     [Header("デバッグ")]
     [Tooltip("デバッグログを表示するか")]
     public bool showDebugLog = true;
@@ -28,17 +56,91 @@ public class CameraSpeedReceiver : MonoBehaviour
     [Tooltip("最後に受信した速度")]
     public float lastReceivedSpeed = 0f;
 
-    private Process pythonProcess;
-    private bool isRunning = false;
+    [Tooltip("現在計測中かどうか")]
+    public bool isProcessing = false;
 
-    // 最新値のみ保持（Queue不要）
-    private float latestSpeed = 0f;
-    private bool hasNewSpeed = false;
-    private object lockObject = new object();
+    private Process pythonProcess;
 
     void Start()
     {
+        if (simulation == null)
+        {
+            UnityEngine.Debug.LogError("[CameraSpeedReceiver] simulationが設定されていません");
+            return;
+        }
+
+        // 定期計測開始（最初は即座に、その後はmeasurementInterval秒ごと）
+        InvokeRepeating(nameof(StartMeasurement), 0f, measurementInterval);
+    }
+
+    /// <summary>
+    /// 計測を開始（定期起動用）
+    /// </summary>
+    void StartMeasurement()
+    {
+        if (isProcessing)
+        {
+            if (showDebugLog)
+                UnityEngine.Debug.LogWarning("[CameraSpeedReceiver] 前回の計測中のためスキップ");
+            return;
+        }
+
         StartPythonProcess();
+    }
+
+    /// <summary>
+    /// 今すぐ計測を開始（UI Button用）
+    /// </summary>
+    public void StartMeasurementNow()
+    {
+        if (isProcessing)
+        {
+            if (showDebugLog)
+                UnityEngine.Debug.LogWarning("[CameraSpeedReceiver] 計測中のため開始できません");
+            return;
+        }
+
+        StartPythonProcess();
+    }
+
+    /// <summary>
+    /// 計測間隔を設定（UI Slider用）
+    /// </summary>
+    public void SetMeasurementInterval(float interval)
+    {
+        measurementInterval = interval;
+
+        // InvokeRepeatingを再設定
+        CancelInvoke(nameof(StartMeasurement));
+        InvokeRepeating(nameof(StartMeasurement), interval, interval);
+
+        if (showDebugLog)
+            UnityEngine.Debug.Log($"[CameraSpeedReceiver] 計測間隔を{interval}秒に設定");
+    }
+
+    /// <summary>
+    /// カメラIDを設定（UI Slider用）
+    /// </summary>
+    public void SetCameraId(float id)
+    {
+        cameraId = Mathf.RoundToInt(id);
+
+        if (showDebugLog)
+            UnityEngine.Debug.Log($"[CameraSpeedReceiver] カメラIDを{cameraId}に設定");
+    }
+
+    /// <summary>
+    /// テストモードを設定（UI Toggle用）
+    /// </summary>
+    public void SetTestMode(bool enabled)
+    {
+        testMode = enabled;
+
+        if (showDebugLog)
+        {
+            string modeText = enabled ? "テストモード" : "本番モード";
+            UnityEngine.Debug.Log($"[CameraSpeedReceiver] {modeText}に切り替え");
+        }
     }
 
     /// <summary>
@@ -58,11 +160,33 @@ public class CameraSpeedReceiver : MonoBehaviour
             return;
         }
 
+        isProcessing = true;
+
+        // モードに応じた空間分解能を選択
+        float spatialRes = testMode ? testSpatialResolution : normalSpatialResolution;
+
         try
         {
+            // カメラID 2以降はカメラ名が必要
+            string videoArg;
+            if (cameraId >= 2)
+            {
+                if (string.IsNullOrEmpty(cameraName))
+                {
+                    UnityEngine.Debug.LogWarning($"[CameraSpeedReceiver] カメラID {cameraId} はカメラ名の指定が必要です。Camera Nameフィールドに入力してください");
+                    isProcessing = false;
+                    return;
+                }
+                videoArg = $"\"{cameraName}\"";
+            }
+            else
+            {
+                videoArg = cameraId.ToString();
+            }
+
             pythonProcess = new Process();
             pythonProcess.StartInfo.FileName = pythonExePath;
-            pythonProcess.StartInfo.Arguments = scriptPath;
+            pythonProcess.StartInfo.Arguments = $"\"{scriptPath}\" --video {videoArg} --spatial-res {spatialRes}";
             pythonProcess.StartInfo.UseShellExecute = false;
             pythonProcess.StartInfo.RedirectStandardOutput = true;
             pythonProcess.StartInfo.RedirectStandardError = true;
@@ -72,22 +196,26 @@ public class CameraSpeedReceiver : MonoBehaviour
             pythonProcess.OutputDataReceived += OnOutputDataReceived;
             pythonProcess.ErrorDataReceived += OnErrorDataReceived;
 
+            // プロセス終了イベント
+            pythonProcess.EnableRaisingEvents = true;
+            pythonProcess.Exited += OnProcessExited;
+
             pythonProcess.Start();
-            isRunning = true;
 
             // 非同期読み取り開始
             pythonProcess.BeginOutputReadLine();
             pythonProcess.BeginErrorReadLine();
 
             if (showDebugLog)
-                UnityEngine.Debug.Log($"[CameraSpeedReceiver] Pythonプロセス起動: {scriptPath}");
-
-            // メインスレッドで速度適用
-            StartCoroutine(ApplyLatestSpeed());
+            {
+                string modeText = testMode ? "テストモード" : "本番モード";
+                UnityEngine.Debug.Log($"[CameraSpeedReceiver] Pythonプロセス起動: {scriptPath} ({modeText}, 空間分解能={spatialRes} m/pixel)");
+            }
         }
         catch (System.Exception e)
         {
             UnityEngine.Debug.LogError($"[CameraSpeedReceiver] Pythonプロセス起動失敗: {e.Message}");
+            isProcessing = false;
         }
     }
 
@@ -98,18 +226,39 @@ public class CameraSpeedReceiver : MonoBehaviour
     {
         if (!string.IsNullOrEmpty(e.Data))
         {
-            if (float.TryParse(e.Data, out float speed))
+            // 全ての標準出力をログ表示（カメラ接続状態等を確認できるように）
+            if (showDebugLog)
+                UnityEngine.Debug.Log($"[Python] {e.Data}");
+
+            // "Estimated Surface Velocity: X.XXXXXX [m/s]" の行を探す
+            if (e.Data.Contains("Estimated Surface Velocity:"))
             {
-                // 最新値のみ保持（上書き）
-                lock (lockObject)
+                // "Estimated Surface Velocity: 0.123456 [m/s]" から数値を抽出
+                string[] parts = e.Data.Split(':');
+                if (parts.Length >= 2)
                 {
-                    latestSpeed = speed;
-                    hasNewSpeed = true;
+                    string valuePart = parts[1].Trim().Split(' ')[0]; // "0.123456"
+                    if (float.TryParse(valuePart, out float speed))
+                    {
+                        // 速度が有効範囲かチェック（マイナスまたは閾値以下は計測失敗）
+                        if (speed < minimumValidSpeed)
+                        {
+                            if (showDebugLog)
+                                UnityEngine.Debug.LogWarning($"[CameraSpeedReceiver] 計測失敗: 速度が閾値以下 ({speed:F6} m/s < {minimumValidSpeed} m/s) - 速度を更新しません");
+                            return;
+                        }
+
+                        lastReceivedSpeed = speed;
+
+                        if (showDebugLog)
+                            UnityEngine.Debug.Log($"[CameraSpeedReceiver] 速度受信: {speed} m/s");
+
+                        if (autoApplySpeed && simulation != null)
+                        {
+                            simulation.SetSpeedMultiplier(speed);
+                        }
+                    }
                 }
-            }
-            else
-            {
-                UnityEngine.Debug.LogWarning($"[CameraSpeedReceiver] 速度変換失敗: {e.Data}");
             }
         }
     }
@@ -126,59 +275,39 @@ public class CameraSpeedReceiver : MonoBehaviour
     }
 
     /// <summary>
-    /// 最新の速度を適用（メインスレッド）
+    /// Pythonプロセス終了時
     /// </summary>
-    IEnumerator ApplyLatestSpeed()
+    void OnProcessExited(object sender, System.EventArgs e)
     {
-        while (isRunning)
-        {
-            bool shouldApply = false;
-            float speed = 0f;
-
-            // 最新値を取得
-            lock (lockObject)
-            {
-                if (hasNewSpeed)
-                {
-                    speed = latestSpeed;
-                    hasNewSpeed = false;
-                    shouldApply = true;
-                }
-            }
-
-            // 速度を適用（メインスレッドで実行）
-            if (shouldApply)
-            {
-                lastReceivedSpeed = speed;
-
-                if (showDebugLog)
-                    UnityEngine.Debug.Log($"[CameraSpeedReceiver] 速度受信: {speed}");
-
-                if (autoApplySpeed && simulation != null)
-                {
-                    simulation.SetSpeedMultiplier(speed);
-                }
-            }
-
-            yield return null;  // 次のフレームまで待機（パーティクルはフリーズしない）
-        }
-
         if (showDebugLog)
-            UnityEngine.Debug.Log("[CameraSpeedReceiver] 速度適用終了");
+            UnityEngine.Debug.Log("[CameraSpeedReceiver] Pythonプロセス終了");
+
+        isProcessing = false;
+
+        // イベントハンドラを解除
+        if (pythonProcess != null)
+        {
+            pythonProcess.OutputDataReceived -= OnOutputDataReceived;
+            pythonProcess.ErrorDataReceived -= OnErrorDataReceived;
+            pythonProcess.Exited -= OnProcessExited;
+            pythonProcess.Dispose();
+            pythonProcess = null;
+        }
     }
 
     /// <summary>
-    /// Pythonプロセスを終了
+    /// Pythonプロセスを強制終了
     /// </summary>
     void StopPythonProcess()
     {
-        isRunning = false;
+        CancelInvoke(nameof(StartMeasurement));
 
         if (pythonProcess != null)
         {
             // イベントハンドラを解除
             pythonProcess.OutputDataReceived -= OnOutputDataReceived;
             pythonProcess.ErrorDataReceived -= OnErrorDataReceived;
+            pythonProcess.Exited -= OnProcessExited;
 
             if (!pythonProcess.HasExited)
             {
@@ -186,16 +315,13 @@ public class CameraSpeedReceiver : MonoBehaviour
             }
 
             pythonProcess.Dispose();
+            pythonProcess = null;
 
             if (showDebugLog)
-                UnityEngine.Debug.Log("[CameraSpeedReceiver] Pythonプロセス終了");
+                UnityEngine.Debug.Log("[CameraSpeedReceiver] Pythonプロセス強制終了");
         }
 
-        // 最新値をリセット
-        lock (lockObject)
-        {
-            hasNewSpeed = false;
-        }
+        isProcessing = false;
     }
 
     void OnDestroy()

@@ -4883,11 +4883,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   pythonExePath: python
-  scriptPath: Assets/StreamingAssets/PythonScripts/river_speed_camera.py
+  scriptPath: Assets/StreamingAssets/PythonScripts/baseline_stiv.py
+  cameraId: 2
+  cameraName: HD Webcam eMeet C960
+  testMode: 0
+  testSpatialResolution: 0.05
+  normalSpatialResolution: 0.01
+  measurementInterval: 15
   simulation: {fileID: 39023637}
   autoApplySpeed: 1
+  minimumValidSpeed: 0.01
   showDebugLog: 1
   lastReceivedSpeed: 0
+  isProcessing: 0
 --- !u!4 &2054949190
 Transform:
   m_ObjectHideFlags: 0
