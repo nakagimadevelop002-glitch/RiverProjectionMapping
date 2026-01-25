@@ -67,6 +67,9 @@ public class CameraSpeedReceiver : MonoBehaviour
     [Tooltip("即時計測ボタン（計測中は無効化）")]
     public Button measureButton;
 
+    [Tooltip("計測結果ログ表示")]
+    public MeasurementLogger logger;
+
     [Header("デバッグ")]
     [Tooltip("デバッグログを表示するか")]
     public bool showDebugLog = true;
@@ -205,6 +208,17 @@ public class CameraSpeedReceiver : MonoBehaviour
 
         isProcessing = true;
 
+        // ログに計測開始を記録
+        if (logger != null)
+        {
+            UnityEngine.Debug.Log("[CameraSpeedReceiver] logger.LogStart()を呼び出します");
+            logger.LogStart();
+        }
+        else
+        {
+            UnityEngine.Debug.LogError("[CameraSpeedReceiver] loggerがnullです！Inspectorで設定してください");
+        }
+
         // モードに応じた空間分解能を選択
         float spatialRes = testMode ? testSpatialResolution : normalSpatialResolution;
 
@@ -293,6 +307,13 @@ public class CameraSpeedReceiver : MonoBehaviour
                         {
                             if (showDebugLog)
                                 UnityEngine.Debug.LogWarning($"[CameraSpeedReceiver] 計測失敗: 速度が閾値以下 ({speed:F6} m/s < {minimumValidSpeed} m/s) - 速度を更新しません");
+
+                            // ログに失敗を記録
+                            if (logger != null)
+                            {
+                                logger.LogFailure(speed, minimumValidSpeed);
+                            }
+
                             return;
                         }
 
@@ -300,6 +321,12 @@ public class CameraSpeedReceiver : MonoBehaviour
 
                         if (showDebugLog)
                             UnityEngine.Debug.Log($"[CameraSpeedReceiver] 速度受信: {speed} m/s");
+
+                        // ログに成功を記録
+                        if (logger != null)
+                        {
+                            logger.LogSuccess(speed);
+                        }
 
                         if (autoApplySpeed && simulation != null)
                         {
@@ -319,6 +346,12 @@ public class CameraSpeedReceiver : MonoBehaviour
         if (!string.IsNullOrEmpty(e.Data))
         {
             UnityEngine.Debug.LogError($"[CameraSpeedReceiver] Pythonエラー: {e.Data}");
+
+            // ログにエラーを記録（最初のエラー行のみ）
+            if (logger != null && (e.Data.StartsWith("OSError") || e.Data.StartsWith("IOError") || e.Data.StartsWith("Exception")))
+            {
+                logger.LogError(e.Data);
+            }
         }
     }
 
