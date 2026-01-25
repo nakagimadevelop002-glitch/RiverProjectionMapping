@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using System.Diagnostics;
 using System.Collections;
 
@@ -62,6 +63,10 @@ public class CameraSpeedReceiver : MonoBehaviour
     [Range(50, 600)]
     public int maxFrames = 300;
 
+    [Header("UI")]
+    [Tooltip("即時計測ボタン（計測中は無効化）")]
+    public Button measureButton;
+
     [Header("デバッグ")]
     [Tooltip("デバッグログを表示するか")]
     public bool showDebugLog = true;
@@ -73,6 +78,7 @@ public class CameraSpeedReceiver : MonoBehaviour
     public bool isProcessing = false;
 
     private Process pythonProcess;
+    private bool lastIsProcessing = false;
 
     void Start()
     {
@@ -82,8 +88,32 @@ public class CameraSpeedReceiver : MonoBehaviour
             return;
         }
 
+        // ボタン初期化
+        UpdateButtonState();
+
         // 定期計測開始（最初は即座に、その後はmeasurementInterval秒ごと）
         InvokeRepeating(nameof(StartMeasurement), 0f, measurementInterval);
+    }
+
+    void Update()
+    {
+        // isProcessing状態が変更された場合、ボタン状態を更新
+        if (isProcessing != lastIsProcessing)
+        {
+            UpdateButtonState();
+            lastIsProcessing = isProcessing;
+        }
+    }
+
+    /// <summary>
+    /// ボタンの有効/無効状態を更新
+    /// </summary>
+    void UpdateButtonState()
+    {
+        if (measureButton != null)
+        {
+            measureButton.interactable = !isProcessing;
+        }
     }
 
     /// <summary>
@@ -178,6 +208,11 @@ public class CameraSpeedReceiver : MonoBehaviour
         // モードに応じた空間分解能を選択
         float spatialRes = testMode ? testSpatialResolution : normalSpatialResolution;
 
+        // モードに応じたSTIV検出パラメータを選択
+        float useSigmaPre = testMode ? sigmaPre : 1.0f;
+        float useSigmaTensor = testMode ? sigmaTensor : 2.0f;
+        int useMaxFrames = testMode ? maxFrames : 300;
+
         try
         {
             // カメラID 2以降はカメラ名が必要
@@ -199,7 +234,7 @@ public class CameraSpeedReceiver : MonoBehaviour
 
             pythonProcess = new Process();
             pythonProcess.StartInfo.FileName = pythonExePath;
-            pythonProcess.StartInfo.Arguments = $"\"{scriptPath}\" --video {videoArg} --spatial-res {spatialRes} --sigma-pre {sigmaPre} --sigma-tensor {sigmaTensor} --max-frames {maxFrames}";
+            pythonProcess.StartInfo.Arguments = $"\"{scriptPath}\" --video {videoArg} --spatial-res {spatialRes} --sigma-pre {useSigmaPre} --sigma-tensor {useSigmaTensor} --max-frames {useMaxFrames}";
             pythonProcess.StartInfo.UseShellExecute = false;
             pythonProcess.StartInfo.RedirectStandardOutput = true;
             pythonProcess.StartInfo.RedirectStandardError = true;
@@ -222,7 +257,7 @@ public class CameraSpeedReceiver : MonoBehaviour
             if (showDebugLog)
             {
                 string modeText = testMode ? "テストモード" : "本番モード";
-                UnityEngine.Debug.Log($"[CameraSpeedReceiver] Pythonプロセス起動: {scriptPath} ({modeText}, 空間分解能={spatialRes} m/pixel, sigma_pre={sigmaPre}, sigma_tensor={sigmaTensor}, max_frames={maxFrames})");
+                UnityEngine.Debug.Log($"[CameraSpeedReceiver] Pythonプロセス起動: {scriptPath} ({modeText}, 空間分解能={spatialRes} m/pixel, sigma_pre={useSigmaPre}, sigma_tensor={useSigmaTensor}, max_frames={useMaxFrames})");
             }
         }
         catch (System.Exception e)
