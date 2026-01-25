@@ -49,6 +49,19 @@ public class CameraSpeedReceiver : MonoBehaviour
     [Range(0.001f, 0.1f)]
     public float minimumValidSpeed = 0.01f;
 
+    [Header("STIV検出パラメータ")]
+    [Tooltip("事前平滑化（小さいほど敏感、テストモード推奨: 0.5）")]
+    [Range(0.1f, 3.0f)]
+    public float sigmaPre = 1.0f;
+
+    [Tooltip("構造テンソル平滑化（小さいほど敏感、テストモード推奨: 1.0）")]
+    [Range(0.1f, 5.0f)]
+    public float sigmaTensor = 2.0f;
+
+    [Tooltip("使用フレーム数（少ないほど短時間の動きを検出、テストモード推奨: 150）")]
+    [Range(50, 600)]
+    public int maxFrames = 300;
+
     [Header("デバッグ")]
     [Tooltip("デバッグログを表示するか")]
     public bool showDebugLog = true;
@@ -186,7 +199,7 @@ public class CameraSpeedReceiver : MonoBehaviour
 
             pythonProcess = new Process();
             pythonProcess.StartInfo.FileName = pythonExePath;
-            pythonProcess.StartInfo.Arguments = $"\"{scriptPath}\" --video {videoArg} --spatial-res {spatialRes}";
+            pythonProcess.StartInfo.Arguments = $"\"{scriptPath}\" --video {videoArg} --spatial-res {spatialRes} --sigma-pre {sigmaPre} --sigma-tensor {sigmaTensor} --max-frames {maxFrames}";
             pythonProcess.StartInfo.UseShellExecute = false;
             pythonProcess.StartInfo.RedirectStandardOutput = true;
             pythonProcess.StartInfo.RedirectStandardError = true;
@@ -209,7 +222,7 @@ public class CameraSpeedReceiver : MonoBehaviour
             if (showDebugLog)
             {
                 string modeText = testMode ? "テストモード" : "本番モード";
-                UnityEngine.Debug.Log($"[CameraSpeedReceiver] Pythonプロセス起動: {scriptPath} ({modeText}, 空間分解能={spatialRes} m/pixel)");
+                UnityEngine.Debug.Log($"[CameraSpeedReceiver] Pythonプロセス起動: {scriptPath} ({modeText}, 空間分解能={spatialRes} m/pixel, sigma_pre={sigmaPre}, sigma_tensor={sigmaTensor}, max_frames={maxFrames})");
             }
         }
         catch (System.Exception e)

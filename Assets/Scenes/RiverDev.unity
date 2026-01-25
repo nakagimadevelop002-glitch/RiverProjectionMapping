@@ -4893,7 +4893,7 @@ MonoBehaviour:
   simulation: {fileID: 39023637}
   autoApplySpeed: 1
   minimumValidSpeed: 0.01
-  showDebugLog: 1
+  showDebugLog: 0
   lastReceivedSpeed: 0
   isProcessing: 0
 --- !u!4 &2054949190
