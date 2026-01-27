@@ -67,8 +67,15 @@ public class CameraSpeedReceiver : MonoBehaviour
     [Tooltip("即時計測ボタン（計測中は無効化）")]
     public Button measureButton;
 
+    [Tooltip("カメラ名入力フィールド（初期値をInspector設定値に同期）")]
+    public UnityEngine.UI.InputField cameraNameInputField;
+
     [Tooltip("計測結果ログ表示")]
     public MeasurementLogger logger;
+
+    [Header("計測制御")]
+    [Tooltip("計測機能を有効にするか")]
+    public bool measurementEnabled = true;
 
     [Header("デバッグ")]
     [Tooltip("デバッグログを表示するか")]
@@ -93,6 +100,12 @@ public class CameraSpeedReceiver : MonoBehaviour
 
         // ボタン初期化
         UpdateButtonState();
+
+        // カメラ名InputFieldの初期値をInspector設定値に同期
+        if (cameraNameInputField != null)
+        {
+            cameraNameInputField.text = cameraName;
+        }
 
         // 定期計測開始（最初は即座に、その後はmeasurementInterval秒ごと）
         InvokeRepeating(nameof(StartMeasurement), 0f, measurementInterval);
@@ -124,6 +137,13 @@ public class CameraSpeedReceiver : MonoBehaviour
     /// </summary>
     void StartMeasurement()
     {
+        if (!measurementEnabled)
+        {
+            if (showDebugLog)
+                UnityEngine.Debug.Log("[CameraSpeedReceiver] 計測機能が無効のためスキップ");
+            return;
+        }
+
         if (isProcessing)
         {
             if (showDebugLog)
@@ -139,6 +159,13 @@ public class CameraSpeedReceiver : MonoBehaviour
     /// </summary>
     public void StartMeasurementNow()
     {
+        if (!measurementEnabled)
+        {
+            if (showDebugLog)
+                UnityEngine.Debug.LogWarning("[CameraSpeedReceiver] 計測機能が無効です");
+            return;
+        }
+
         if (isProcessing)
         {
             if (showDebugLog)
@@ -176,6 +203,17 @@ public class CameraSpeedReceiver : MonoBehaviour
     }
 
     /// <summary>
+    /// カメラ名を設定（UI InputField用）
+    /// </summary>
+    public void SetCameraName(string name)
+    {
+        cameraName = name;
+
+        if (showDebugLog)
+            UnityEngine.Debug.Log($"[CameraSpeedReceiver] カメラ名を'{cameraName}'に設定");
+    }
+
+    /// <summary>
     /// テストモードを設定（UI Toggle用）
     /// </summary>
     public void SetTestMode(bool enabled)
@@ -186,6 +224,37 @@ public class CameraSpeedReceiver : MonoBehaviour
         {
             string modeText = enabled ? "テストモード" : "本番モード";
             UnityEngine.Debug.Log($"[CameraSpeedReceiver] {modeText}に切り替え");
+        }
+    }
+
+    /// <summary>
+    /// 計測機能の無効化を設定（UI Toggle用）
+    /// </summary>
+    /// <param name="disabled">true: 計測を停止、false: 計測を有効化</param>
+    public void SetMeasurementDisabled(bool disabled)
+    {
+        measurementEnabled = !disabled;
+
+        if (showDebugLog)
+        {
+            string status = measurementEnabled ? "有効" : "無効";
+            UnityEngine.Debug.Log($"[CameraSpeedReceiver] 計測機能を{status}に設定");
+        }
+
+        if (disabled)
+        {
+            // 無効化時: 定期実行停止 + 実行中のプロセス停止
+            CancelInvoke(nameof(StartMeasurement));
+            if (isProcessing)
+            {
+                StopPythonProcess();
+            }
+        }
+        else
+        {
+            // 有効化時: 定期実行再開
+            CancelInvoke(nameof(StartMeasurement));  // 念のため既存をキャンセル
+            InvokeRepeating(nameof(StartMeasurement), 0f, measurementInterval);
         }
     }
 
@@ -302,11 +371,11 @@ public class CameraSpeedReceiver : MonoBehaviour
                     string valuePart = parts[1].Trim().Split(' ')[0]; // "0.123456"
                     if (float.TryParse(valuePart, out float speed))
                     {
-                        // 速度が有効範囲かチェック（マイナスまたは閾値以下は計測失敗）
-                        if (speed < minimumValidSpeed)
+                        // 速度が有効範囲かチェック（絶対値が閾値以下は計測失敗）
+                        if (Mathf.Abs(speed) < minimumValidSpeed)
                         {
                             if (showDebugLog)
-                                UnityEngine.Debug.LogWarning($"[CameraSpeedReceiver] 計測失敗: 速度が閾値以下 ({speed:F6} m/s < {minimumValidSpeed} m/s) - 速度を更新しません");
+                                UnityEngine.Debug.LogWarning($"[CameraSpeedReceiver] 計測失敗: 速度が閾値以下 (|{speed:F6}| m/s < {minimumValidSpeed} m/s) - 速度を更新しません");
 
                             // ログに失敗を記録
                             if (logger != null)
@@ -347,8 +416,8 @@ public class CameraSpeedReceiver : MonoBehaviour
         {
             UnityEngine.Debug.LogError($"[CameraSpeedReceiver] Pythonエラー: {e.Data}");
 
-            // ログにエラーを記録（最初のエラー行のみ）
-            if (logger != null && (e.Data.StartsWith("OSError") || e.Data.StartsWith("IOError") || e.Data.StartsWith("Exception")))
+            // ログにエラーを記録
+            if (logger != null && (e.Data.StartsWith("[ERROR]") || e.Data.StartsWith("OSError") || e.Data.StartsWith("IOError") || e.Data.StartsWith("Exception") || e.Data.Contains("Camera")))
             {
                 logger.LogError(e.Data);
             }

@@ -31,6 +31,14 @@ public class RiverFlowSimulation : MonoBehaviour
     [Range(0.01f, 5.0f)]
     public float speedMultiplier = 1.0f;
 
+    [Tooltip("実世界の基準速度 [m/s]（この速度の時speedMultiplier=1.0となる）")]
+    [Min(0.01f)]
+    public float baseRealWorldSpeed = 0.5f;
+
+    [Tooltip("速度調整係数（受信速度に掛ける倍率、視覚的な速度調整用）")]
+    [Range(0.1f, 10.0f)]
+    public float speedAdjustmentFactor = 1.0f;
+
     [Header("WaveMode設定")]
     [Tooltip("壁の生成間隔（秒）")]
     [Min(0.01f)]
@@ -434,17 +442,23 @@ public class RiverFlowSimulation : MonoBehaviour
     // ========================================
 
     /// <summary>
-    /// 速度を設定（Slider用 - 両モード対応）
+    /// 実世界の速度（m/s）を設定
+    /// 受信した速度を基準速度に対する比率に変換し、調整係数を適用してspeedMultiplier/waveSpeedに設定
     /// </summary>
-    public void SetSpeedMultiplier(float speed)
+    public void SetSpeedMultiplier(float realWorldSpeed)
     {
+        // 基準速度に対する比率を計算 × 調整係数
+        float ratio = (realWorldSpeed / baseRealWorldSpeed) * speedAdjustmentFactor;
+
         if (mode == SimulationMode.NormalMode)
         {
-            speedMultiplier = speed;
+            speedMultiplier = ratio;
+            UnityEngine.Debug.Log($"[RiverFlowSimulation] 速度設定: {realWorldSpeed:F6} m/s × {speedAdjustmentFactor:F2} → speedMultiplier = {ratio:F3} (基準速度: {baseRealWorldSpeed} m/s)");
         }
         else if (mode == SimulationMode.WaveMode)
         {
-            waveSpeed = speed;
+            waveSpeed = ratio;
+            UnityEngine.Debug.Log($"[RiverFlowSimulation] 速度設定: {realWorldSpeed:F6} m/s × {speedAdjustmentFactor:F2} → waveSpeed = {ratio:F3} (基準速度: {baseRealWorldSpeed} m/s)");
         }
     }
 
@@ -475,6 +489,16 @@ public class RiverFlowSimulation : MonoBehaviour
     public void SetWaveWidthMaxMultiplier(float multiplier)
     {
         waveWidthMaxMultiplier = multiplier;
+    }
+
+    /// <summary>
+    /// 速度調整係数を設定（UI Slider用）
+    /// 視覚的な速度調整に使用（観測位置・角度による見え方の違いを補正）
+    /// </summary>
+    public void SetSpeedAdjustmentFactor(float factor)
+    {
+        speedAdjustmentFactor = factor;
+        UnityEngine.Debug.Log($"[RiverFlowSimulation] 速度調整係数を{factor:F2}に設定");
     }
 
     /// <summary>
