@@ -315,9 +315,26 @@ public class CameraSpeedReceiver : MonoBehaviour
                 videoArg = cameraId.ToString();
             }
 
+            // ビルド後対応：scriptPathをApplication.streamingAssetsPathベースで構築
+            string fullScriptPath;
+            if (scriptPath.StartsWith("Assets/StreamingAssets/"))
+            {
+                // "Assets/StreamingAssets/PythonScripts/baseline_stiv.py" → "PythonScripts/baseline_stiv.py"
+                string relativePath = scriptPath.Substring("Assets/StreamingAssets/".Length);
+                fullScriptPath = System.IO.Path.Combine(Application.streamingAssetsPath, relativePath);
+            }
+            else
+            {
+                // 絶対パスまたは他の形式の場合はそのまま使用
+                fullScriptPath = scriptPath;
+            }
+
+            if (showDebugLog)
+                UnityEngine.Debug.Log($"[CameraSpeedReceiver] スクリプトパス: {fullScriptPath}");
+
             pythonProcess = new Process();
             pythonProcess.StartInfo.FileName = pythonExePath;
-            pythonProcess.StartInfo.Arguments = $"\"{scriptPath}\" --video {videoArg} --spatial-res {spatialRes} --sigma-pre {useSigmaPre} --sigma-tensor {useSigmaTensor} --max-frames {useMaxFrames}";
+            pythonProcess.StartInfo.Arguments = $"\"{fullScriptPath}\" --video {videoArg} --spatial-res {spatialRes} --sigma-pre {useSigmaPre} --sigma-tensor {useSigmaTensor} --max-frames {useMaxFrames}";
             pythonProcess.StartInfo.UseShellExecute = false;
             pythonProcess.StartInfo.RedirectStandardOutput = true;
             pythonProcess.StartInfo.RedirectStandardError = true;
@@ -416,8 +433,8 @@ public class CameraSpeedReceiver : MonoBehaviour
         {
             UnityEngine.Debug.LogError($"[CameraSpeedReceiver] Pythonエラー: {e.Data}");
 
-            // ログにエラーを記録
-            if (logger != null && (e.Data.StartsWith("[ERROR]") || e.Data.StartsWith("OSError") || e.Data.StartsWith("IOError") || e.Data.StartsWith("Exception") || e.Data.Contains("Camera")))
+            // ログにエラーを記録（ビルド後のパスエラーも含む）
+            if (logger != null && (e.Data.StartsWith("[ERROR]") || e.Data.StartsWith("OSError") || e.Data.StartsWith("IOError") || e.Data.StartsWith("Exception") || e.Data.Contains("Camera") || e.Data.StartsWith("python:")))
             {
                 logger.LogError(e.Data);
             }
